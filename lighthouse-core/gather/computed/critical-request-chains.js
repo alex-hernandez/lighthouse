@@ -22,6 +22,9 @@ class CriticalRequestChains extends ComputedArtifact {
   static isCritical(request) {
     const resourceTypeCategory = request._resourceType && request._resourceType._category;
 
+    // Iframes are considered High Priority but they are not render blocking
+    const isIframe = resourceTypeCategory === WebInspector.resourceTypes.Document._category
+      && request.initiator().type !== 'other';
     // XHRs are fetched at High priority, but we exclude them, as they are unlikely to be critical
     // Images are also non-critical.
     // Treat any images missed by category, primarily favicons, as non-critical resources
@@ -30,6 +33,7 @@ class CriticalRequestChains extends ComputedArtifact {
       WebInspector.resourceTypes.XHR._category,
     ];
     if (nonCriticalResourceTypes.includes(resourceTypeCategory) ||
+        isIframe ||
         request.mimeType && request.mimeType.startsWith('image/')) {
       return false;
     }

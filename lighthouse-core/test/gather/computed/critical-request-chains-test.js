@@ -9,6 +9,7 @@
 
 const assert = require('assert');
 const CriticalRequestChains = require('../../../gather/computed/critical-request-chains');
+const WebInspector = require('../../../lib/web-inspector');
 const Runner = require('../../../runner.js');
 
 const HIGH = 'High';
@@ -306,6 +307,40 @@ describe('CriticalRequestChain gatherer: extractChain function', () => {
     networkRecords[3].parsedURL = {
       lastPathComponent: 'android-chrome-192x192.png',
     };
+
+    const criticalChains = CriticalRequestChains.extractChain(networkRecords);
+    assert.deepEqual(criticalChains, {
+      0: {
+        request: constructEmptyRequest(),
+        children: {},
+      },
+    });
+  });
+
+  it('discards iframes as non-critical', () => {
+    const networkRecords = mockTracingData([HIGH, HIGH, HIGH], [[0, 1], [0, 2]]);
+
+    // 1th record is the root document
+    networkRecords[0].url = 'https://example.com';
+    networkRecords[0].mimeType = 'text/html';
+    networkRecords[0]._resourceType._category = WebInspector.resourceTypes.Document._category;
+    networkRecords[0].initiator = () => ({
+      type: 'other',
+    });
+    // 2nd record is an iframe in the page
+    networkRecords[1].url = 'https://example.com/iframe.html';
+    networkRecords[1].mimeType = 'text/html';
+    networkRecords[1]._resourceType._category = WebInspector.resourceTypes.Document._category;
+    networkRecords[1].initiator = () => ({
+      type: 'parser',
+    });
+    // 3rd record is an iframe loaded by a script
+    networkRecords[2].url = 'https://youtube.com/';
+    networkRecords[2].mimeType = 'text/html';
+    networkRecords[2]._resourceType._category = WebInspector.resourceTypes.Document._category;
+    networkRecords[2].initiator = () => ({
+      type: 'script',
+    });
 
     const criticalChains = CriticalRequestChains.extractChain(networkRecords);
     assert.deepEqual(criticalChains, {
