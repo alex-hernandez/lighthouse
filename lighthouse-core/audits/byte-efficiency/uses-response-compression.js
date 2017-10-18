@@ -22,7 +22,7 @@ class ResponsesAreCompressed extends ByteEfficiencyAudit {
   static get meta() {
     return {
       category: 'Performance',
-      name: 'uses-request-compression',
+      name: 'uses-response-compression',
       informative: true,
       description: 'Enable text compression',
       helpText: 'Text-based responses should be served with compression (gzip, deflate or brotli)' +
@@ -42,7 +42,7 @@ class ResponsesAreCompressed extends ByteEfficiencyAudit {
 
     const results = [];
     uncompressedResponses.forEach(record => {
-      const originalSize = record.resourceSize;
+      const originalSize = record.transferSize;
       const gzipSize = record.gzipSize;
       const gzipSavings = originalSize - gzipSize;
 
@@ -57,7 +57,7 @@ class ResponsesAreCompressed extends ByteEfficiencyAudit {
       // remove duplicates
       const url = URL.elideDataURI(record.url);
       const isDuplicate = results.find(res => res.url === url &&
-        res.totalBytes === record.resourceSize);
+        res.totalBytes === record.transferSize);
       if (isDuplicate) {
         return;
       }
