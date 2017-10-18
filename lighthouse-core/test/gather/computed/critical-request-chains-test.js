@@ -24,6 +24,7 @@ function mockTracingData(prioritiesList, edges) {
       _resourceType: {
         _category: 'fake',
       },
+      frameId: 1,
       finished: true,
       priority: () => priority,
       initiatorRequest: () => null,
@@ -40,7 +41,8 @@ function mockTracingData(prioritiesList, edges) {
 
 function testGetCriticalChain(data) {
   const networkRecords = mockTracingData(data.priorityList, data.edges);
-  const criticalChains = CriticalRequestChains.extractChain(networkRecords);
+  const mainResource = networkRecords[0];
+  const criticalChains = CriticalRequestChains.extractChain([networkRecords, mainResource]);
   assert.deepEqual(criticalChains, data.expected);
 }
 
@@ -262,12 +264,13 @@ describe('CriticalRequestChain gatherer: extractChain function', () => {
 
   it('handles redirects', () => {
     const networkRecords = mockTracingData([HIGH, HIGH, HIGH], [[0, 1], [1, 2]]);
+    const mainResource = networkRecords[0];
 
     // Make a fake redirect
     networkRecords[1].requestId = '1:redirected.0';
     networkRecords[2].requestId = '1';
 
-    const criticalChains = CriticalRequestChains.extractChain(networkRecords);
+    const criticalChains = CriticalRequestChains.extractChain([networkRecords, mainResource]);
     assert.deepEqual(criticalChains, {
       0: {
         request: constructEmptyRequest(),
@@ -288,6 +291,7 @@ describe('CriticalRequestChain gatherer: extractChain function', () => {
 
   it('discards favicons as non-critical', () => {
     const networkRecords = mockTracingData([HIGH, HIGH, HIGH, HIGH], [[0, 1], [0, 2], [0, 3]]);
+    const mainResource = networkRecords[0];
 
     // 2nd record is a favicon
     networkRecords[1].url = 'https://example.com/favicon.ico';
@@ -308,7 +312,7 @@ describe('CriticalRequestChain gatherer: extractChain function', () => {
       lastPathComponent: 'android-chrome-192x192.png',
     };
 
-    const criticalChains = CriticalRequestChains.extractChain(networkRecords);
+    const criticalChains = CriticalRequestChains.extractChain([networkRecords, mainResource]);
     assert.deepEqual(criticalChains, {
       0: {
         request: constructEmptyRequest(),
@@ -319,30 +323,24 @@ describe('CriticalRequestChain gatherer: extractChain function', () => {
 
   it('discards iframes as non-critical', () => {
     const networkRecords = mockTracingData([HIGH, HIGH, HIGH], [[0, 1], [0, 2]]);
+    const mainResource = networkRecords[0];
 
     // 1th record is the root document
     networkRecords[0].url = 'https://example.com';
     networkRecords[0].mimeType = 'text/html';
     networkRecords[0]._resourceType._category = WebInspector.resourceTypes.Document._category;
-    networkRecords[0].initiator = () => ({
-      type: 'other',
-    });
     // 2nd record is an iframe in the page
     networkRecords[1].url = 'https://example.com/iframe.html';
     networkRecords[1].mimeType = 'text/html';
     networkRecords[1]._resourceType._category = WebInspector.resourceTypes.Document._category;
-    networkRecords[1].initiator = () => ({
-      type: 'parser',
-    });
+    networkRecords[0].frameId = '2';
     // 3rd record is an iframe loaded by a script
     networkRecords[2].url = 'https://youtube.com/';
     networkRecords[2].mimeType = 'text/html';
     networkRecords[2]._resourceType._category = WebInspector.resourceTypes.Document._category;
-    networkRecords[2].initiator = () => ({
-      type: 'script',
-    });
+    networkRecords[0].frameId = '3';
 
-    const criticalChains = CriticalRequestChains.extractChain(networkRecords);
+    const criticalChains = CriticalRequestChains.extractChain([networkRecords, mainResource]);
     assert.deepEqual(criticalChains, {
       0: {
         request: constructEmptyRequest(),
@@ -353,10 +351,11 @@ describe('CriticalRequestChain gatherer: extractChain function', () => {
 
   it('handles non-existent nodes when building the tree', () => {
     const networkRecords = mockTracingData([HIGH, HIGH], [[0, 1]]);
+    const mainResource = networkRecords[0];
 
     // Reverse the records so we force nodes to be made early.
     networkRecords.reverse();
-    const criticalChains = CriticalRequestChains.extractChain(networkRecords);
+    const criticalChains = CriticalRequestChains.extractChain([networkRecords, mainResource]);
     assert.deepEqual(criticalChains, {
       0: {
         request: constructEmptyRequest(),

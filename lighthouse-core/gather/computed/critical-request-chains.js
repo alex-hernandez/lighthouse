@@ -17,14 +17,15 @@ class CriticalRequestChains extends ComputedArtifact {
    * For now, we use network priorities as a proxy for "render-blocking"/critical-ness.
    * It's imperfect, but there is not a higher-fidelity signal available yet.
    * @see https://docs.google.com/document/d/1bCDuq9H1ih9iNjgzyAL0gpwNFiEP4TZS-YLRp_RuMlc
-   * @param  {any} request
+   * @param {any} request
+   * @param {!WebInspector.NetworkRequest}
    */
-  static isCritical(request) {
+  static isCritical(request, mainResource) {
     const resourceTypeCategory = request._resourceType && request._resourceType._category;
 
     // Iframes are considered High Priority but they are not render blocking
     const isIframe = resourceTypeCategory === WebInspector.resourceTypes.Document._category
-      && request.initiator().type !== 'other';
+      && request.frameId !== mainResource.frameId;
     // XHRs are fetched at High priority, but we exclude them, as they are unlikely to be critical
     // Images are also non-critical.
     // Treat any images missed by category, primarily favicons, as non-critical resources
@@ -41,7 +42,7 @@ class CriticalRequestChains extends ComputedArtifact {
     return ['VeryHigh', 'High', 'Medium'].includes(request.priority());
   }
 
-  static extractChain(networkRecords) {
+  static extractChain([networkRecords, mainResource]) {
     networkRecords = networkRecords.filter(req => req.finished);
 
     // Build a map of requestID -> Node.
@@ -52,7 +53,8 @@ class CriticalRequestChains extends ComputedArtifact {
 
     // Get all the critical requests.
     /** @type {!Array<NetworkRequest>} */
-    const criticalRequests = networkRecords.filter(CriticalRequestChains.isCritical);
+    const criticalRequests = networkRecords.filter(request =>
+      CriticalRequestChains.isCritical(request, mainResource));
 
     const flattenRequest = request => {
       return {
@@ -74,7 +76,7 @@ class CriticalRequestChains extends ComputedArtifact {
       let ancestorRequest = request.initiatorRequest();
       let node = criticalRequestChains;
       while (ancestorRequest) {
-        const ancestorIsCritical = CriticalRequestChains.isCritical(ancestorRequest);
+        const ancestorIsCritical = CriticalRequestChains.isCritical(ancestorRequest,mainResource);
 
         // If the parent request isn't a high priority request it won't be in the
         // requestIdToRequests map, and so we can break the chain here. We should also
@@ -134,7 +136,10 @@ class CriticalRequestChains extends ComputedArtifact {
    * @return {!Promise<!Object>}
    */
   compute_(devtoolsLog, artifacts) {
-    return artifacts.requestNetworkRecords(devtoolsLog)
+    return Promise.all([
+      artifacts.requestNetworkRecords(devtoolsLog),
+      artifacts.requestMainResource(devtoolsLog),
+    ])
       .then(CriticalRequestChains.extractChain);
   }
 }
